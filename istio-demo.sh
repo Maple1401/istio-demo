@@ -2,6 +2,8 @@
 
 PROFILE="$HOME/.bash_profile"
 
+NAMESPACE="default"
+
 # 导入 PATH 变量
 export PATH=${HELM_PATH}:${BIN_PATH}:$PATH
 
@@ -48,16 +50,22 @@ function install_istio()
     export PATH=$PWD/bin:$PATH
     echo "export PATH=$PWD/bin:$PATH" >> ${PROFILE}
     istioctl install --set profile=demo -y
-    kubectl label namespace default istio-injection=enabled
+    logger info " ... "
+    kubectl label ${NAMESPACE} default istio-injection=enabled
 }
 
 function deploy_bookinfo () {
     logger info "Start deploying bookinfo demo with kubectl apply ... "
-    kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
+    kubectl -n ${NAMESPACE} apply -f samples/bookinfo/platform/kube/bookinfo.yaml
     logger info "Checking curl"
-    kubectl exec "$(kubectl get pod -l app=ratings -o jsonpath='{.items[0].metadata.name}')" -c ratings -- curl -s productpage:9080/productpage | grep -o "<title>.*</title>"
+    kubectl -n ${NAMESPACE}  exec "$(kubectl  -n ${NAMESPACE}  get pod -l app=ratings -o jsonpath='{.items[0].metadata.name}')" -c ratings -- curl -s productpage:9080/productpage | grep -o "<title>.*</title>"
     logger info "Deploying bookinfo ingress gateway rules ..."
-    kubectl apply -f samples/bookinfo/networking/bookinfo-gateway.yaml
+    kubectl -n ${NAMESPACE}  apply -f samples/bookinfo/networking/bookinfo-gateway.yaml
+    logger info "Deploying bookinfo destination rules ..."
+    kubectl -n ${NAMESPACE}  apply -f samples/bookinfo/networking/destination-rule-all.yaml
+    logger info "Deploying bookinfo virtual service ..."
+    kubectl -n ${NAMESPACE}  apply -f samples/bookinfo/networking/virtual-service-all-v1.yaml
+    kubectl -n ${NAMESPACE}  apply -f samples/bookinfo/networking/virtual-service-reviews-test-v2.yaml
     kubectl apply -f samples/addons
 }
 
@@ -120,11 +128,14 @@ EOF
 
 function delete_demo () {
     cd istio-1.13.2
-    kubectl delete -f samples/bookinfo/platform/kube/bookinfo.yaml || true
-    kubectl delete -f samples/bookinfo/networking/bookinfo-gateway.yaml || true
-    kubectl delete -f samples/addons || true
-    kubectl delete namespace istio-system || true
-    kubectl label namespace default istio-injection- || true
+    kubectl -n ${NAMESPACE} delete -f samples/bookinfo/platform/kube/bookinfo.yaml || true
+    kubectl -n ${NAMESPACE} delete -f samples/bookinfo/networking/bookinfo-gateway.yaml || true
+    kubectl -n ${NAMESPACE} delete -f samples/bookinfo/networking/destination-rule-all.yaml || true
+    kubectl -n ${NAMESPACE} delete -f samples/bookinfo/networking/virtual-service-all-v1.yaml || true
+    kubectl -n ${NAMESPACE} delete -f samples/bookinfo/networking/virtual-service-reviews-test-v2.yaml || true
+    kubectl -n ${NAMESPACE} delete -f samples/addons || true
+    kubectl -n ${NAMESPACE} delete namespace istio-system || true
+    kubectl label namespace ${NAMESPACE} istio-injection- || true
     kubectl delete namespace travel-agency || true
     kubectl delete namespace travel-portal || true
     kubectl delete namespace travel-control || true
